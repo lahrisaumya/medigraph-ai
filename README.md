@@ -12,36 +12,36 @@
 
 ## 📋 Overview
 
-MediGraph AI is an AI-powered clinical decision support system that predicts medication non-adherence risk, builds a healthcare knowledge graph, and generates personalised intervention plans — combining graph databases, machine learning, and generative AI into a unified clinical intelligence platform.
+MediGraph AI is an AI-powered clinical decision support system that predicts medication non-adherence risk, builds a healthcare knowledge graph, and generates personalised intervention plans-combining graph databases, machine learning, and generative AI into a unified clinical intelligence platform.
 
-The system analyses healthcare documents, maps semantic relationships between patients, diseases, medications, symptoms, and lab results, predicts which patients are likely to become non-adherent before deterioration occurs, and recommends targeted interventions — moving healthcare from reactive to proactive care.
+The system analyses healthcare documents, maps semantic relationships between patients, diseases, medications, symptoms, and lab results, predicts which patients are likely to become non-adherent before deterioration occurs, and recommends targeted interventions - moving healthcare from reactive to proactive care.
 
 ## ✨ Key Features
 
-- 🧠 **Healthcare Knowledge Graph** — Neo4j graph with 13 relationship types modelling disease progression, drug interactions, contraindications, and comorbidity patterns
-- 🤖 **4-Agent AI Pipeline** — LangGraph orchestration: Document → Knowledge Graph → Risk → Intervention agents, powered by Google Gemini 2.0 Flash
-- 📊 **Predictive Risk Model** — XGBoost classifier trained on 20,000 patients from 4 real clinical datasets
-- 📄 **Document Intelligence** — PDF/OCR extraction with Gemini AI for structured clinical entity extraction
-- 🔮 **What-If Simulation** — Cross-sectional counterfactual risk modelling for care planning
-- 💊 **Drug Safety Center** — Real-time OpenFDA integration for adverse events, recalls, and interactions
-- 📈 **Executive Dashboard** — Real-time KPIs, risk distribution, and population health analytics
-- 🗄️ **Dual Database Architecture** — MongoDB Atlas for document storage + Neo4j Aura for graph relationships
+- 🧠 **Healthcare Knowledge Graph** - Neo4j graph with 13 relationship types modelling disease progression, drug interactions, contraindications, and comorbidity patterns
+- 🤖 **4-Agent AI Pipeline** - LangGraph orchestration: Document → Knowledge Graph → Risk → Intervention agents, powered by Google Gemini 2.0 Flash
+- 📊 **Predictive Risk Model** - XGBoost classifier trained on 20,000 patients from 4 real clinical datasets
+- 📄 **Document Intelligence** - PDF/OCR extraction with Gemini AI for structured clinical entity extraction
+- 🔮 **What-If Simulation** - Cross-sectional counterfactual risk modelling for care planning
+- 💊 **Drug Safety Center** - Real-time OpenFDA integration for adverse events, recalls, and interactions
+- 📈 **Executive Dashboard** - Real-time KPIs, risk distribution, and population health analytics
+- 🗄️ **Dual Database Architecture** - MongoDB Atlas for document storage + Neo4j Aura for graph relationships
 
 ## 🏗️ Architecture
 
 The system follows a layered architecture:
 
-**Frontend Layer** — Vanilla JavaScript dashboard with D3.js force-directed graphs and Plotly.js charts, served as static files.
+**Frontend Layer** - Vanilla JavaScript dashboard with D3.js force-directed graphs and Plotly.js charts, served as static files.
 
-**API Layer** — FastAPI backend exposing 6 routers: Patients, Documents, Risk, Simulation, Graph, and Drugs — all with async request handling.
+**API Layer** - FastAPI backend exposing 6 routers: Patients, Documents, Risk, Simulation, Graph, and Drugs — all with async request handling.
 
-**Intelligence Layer** — A 4-agent LangGraph pipeline processes each document:
+**Intelligence Layer** - A 4-agent LangGraph pipeline processes each document:
 1. **Document Agent** extracts text via PyMuPDF/OCR and structures it using **Gemini 2.0 Flash**
 2. **Knowledge Graph Agent** ingests entities into **Neo4j Aura**
 3. **Risk Agent** runs XGBoost inference and explains results via **Gemini**
 4. **Intervention Agent** generates a care plan via **Gemini**
 
-**Data Layer** — **MongoDB Atlas** stores patient records, documents, risk predictions, and simulation history. **Neo4j Aura** stores the clinical knowledge graph (diseases, medications, symptoms, lab tests, risk factors, and their relationships).
+**Data Layer** - **MongoDB Atlas** stores patient records, documents, risk predictions, and simulation history. **Neo4j Aura** stores the clinical knowledge graph (diseases, medications, symptoms, lab tests, risk factors, and their relationships).
 
 ## 🛠️ Tech Stack
 
@@ -124,7 +124,7 @@ source venv/bin/activate       # Mac/Linux
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure environment — add your MongoDB, Neo4j, and Gemini credentials
+# Configure environment - add your MongoDB, Neo4j, and Gemini credentials
 cp .env.example .env
 
 # Train the ML model
@@ -173,20 +173,20 @@ medigraph-ai/
 
 ## 📖 Documentation
 
-| Document | Description |
-|          |             |
-| [SETUP.md](docs/SETUP.md) | Complete step-by-step setup guide including MongoDB and Neo4j configuration |
-| [API.md](docs/API.md) | Full REST API reference |
-| [DATASET.md](docs/DATASET.md) | Dataset sources and preprocessing methodology |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Cloud deployment instructions |
-| [VIVA_QA.md](docs/VIVA_QA.md) | 24 anticipated viva questions with detailed answers |
+Document Description
+
+SETUP.md: (docs/SETUP.md)-Complete step-by-step setup guide including MongoDB and Neo4j configuration
+API.md: (docs/API.md)-Full REST API reference
+DATASET.md: (docs/DATASET.md)-Dataset sources and preprocessing methodology
+DEPLOYMENT.md: (docs/DEPLOYMENT.md)-Cloud deployment instructions
+VIVA_QA.md: (docs/VIVA_QA.md)-24 anticipated viva questions with detailed answers
 
 
 ## Acknowledgements
 
-- **MIMIC-III Clinical Database** — PhysioNet / MIT Lab for Computational Physiology
-- **UCI Machine Learning Repository** — Diabetes 130-US, Heart Disease, CKD datasets
-- **OpenFDA** — FDA Adverse Event Reporting System (FAERS) data
-- **MongoDB Atlas** — Document database infrastructure
-- **Neo4j Aura** — Graph database infrastructure
-- **Google Gemini** — Generative AI clinical intelligence
+- **MIMIC-III Clinical Database** - PhysioNet / MIT Lab for Computational Physiology
+- **UCI Machine Learning Repository** - Diabetes 130-US, Heart Disease, CKD datasets
+- **OpenFDA** - FDA Adverse Event Reporting System (FAERS) data
+- **MongoDB Atlas** - Document database infrastructure
+- **Neo4j Aura** - Graph database infrastructure
+- **Google Gemini** - Generative AI clinical intelligence
