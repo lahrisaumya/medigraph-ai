@@ -45,57 +45,55 @@ The system follows a layered architecture:
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|       |            |
-| Backend Framework | FastAPI, LangGraph, LangChain |
-| Machine Learning | XGBoost, scikit-learn, pandas, numpy |
-| Graph Database | **Neo4j Aura** (free tier) |
-| Document Database | **MongoDB Atlas** (free tier) |
-| Generative AI | **Google Gemini 2.0 Flash** |
-| PDF Processing | PyMuPDF, Tesseract OCR |
-| Frontend | HTML5, Vanilla JavaScript, D3.js, Plotly.js |
-| External APIs | OpenFDA (drug safety data) |
+1. Backend Framework: FastAPI, LangGraph, LangChain
+2. Machine Learning: XGBoost, Scikit-learn, Pandas, NumPy
+3. Graph Database: Neo4j Aura (Free Tier)
+4. Document Database: MongoDB Atlas (Free Tier)
+5. Generative AI: Google Gemini 2.0 Flash
+6. PDF Processing: PyMuPDF, Tesseract OCR
+7. Frontend: HTML5, Vanilla JavaScript, D3.js, Plotly.js
 
 ## 📊 Dataset
 
 Training data combines **4 real clinical datasets** into 20,000 patient records:
 
 | Source | Patients | Contribution |
-|        |          |              |
-| [MIMIC-III Demo](https://physionet.org/content/mimiciii-demo/1.4/) | 100 | Real ICU clinical structure |
-| [Diabetes 130-US Hospitals](https://archive.ics.uci.edu/dataset/296/) | 15,000 sampled | Real diabetic EHR records |
-| [Cleveland Heart Disease](https://archive.ics.uci.edu/dataset/45/) | 303 | Real cardiac clinical features |
-| [CKD Dataset (India)](https://archive.ics.uci.edu/dataset/336/) | 400 | Real kidney function markers |
-| Calibrated synthetic | 4,197 | Fills population gaps |
+|----------|----------:|----------|
+| MIMIC-III Demo | 100 | Real ICU clinical structure |
+| Diabetes 130-US Hospitals | 15,000 (sampled) | Real diabetic EHR records |
+| Cleveland Heart Disease | 303 | Real cardiac clinical features |
+| CKD Dataset (India) | 400 | Real kidney function markers |
+| Calibrated Synthetic Data | 4,197 | Fills population gaps |
 
-See [docs/DATASET.md](docs/DATASET.md) for full methodology.
+See `docs/DATASET.md` for the complete methodology.
+
 
 ## 🎯 Model Performance
 
 | Metric | Score |
-|        |       |
+|----------|----------:|
 | Accuracy | 85.3% |
 | Precision | 76.1% |
-| **Recall** | **92.2%** |
+| Recall | 92.2% |
 | F1 Score | 83.3% |
-| **ROC-AUC** | **95.5%** |
-| CV F1 (5-fold) | 0.840 ± 0.004 |
+| ROC-AUC | 95.5% |
+| CV F1 (5-Fold) | 0.840 ± 0.004 |
 
-17 engineered features including adherence rate, comorbidity count, HbA1c, hospital visits, and demographic factors.
+**17 engineered features** including adherence rate, comorbidity count, HbA1c, hospital visits, and demographic factors.
 
 ## 🧠 Knowledge Graph
 
-**54 nodes** across 6 types (Patient, Disease, Medication, Symptom, LabTest, RiskFactor) and **137 relationships** across **13 relationship types**, all stored in **Neo4j Aura**:
+**54 nodes** across **6 entity types** (Patient, Disease, Medication, Symptom, Lab Test, and Risk Factor) and **137 relationships** across **13 relationship types**, all stored in **Neo4j Aura**.
 
-| Relationship | Models |
-|              |        |
-| `HAS_DISEASE` `TAKES_MEDICATION` `SHOWS_SYMPTOM` | Core patient clinical state |
+| Relationship Type | Description |
+|----------|----------|
+| `HAS_DISEASE`, `TAKES_MEDICATION`, `SHOWS_SYMPTOM` | Core patient clinical state |
 | `COMPLICATES` | Disease progression pathways |
 | `CO_OCCURS_WITH` | Comorbidity patterns |
 | `CONTRAINDICATED` | Drug safety warnings |
 | `INTERACTS_WITH` | Drug-drug interactions |
 | `CAUSES_SYMPTOM` | Disease-symptom causal links |
-| `MONITORS` | Lab test-disease monitoring |
+| `MONITORS` | Lab test–disease monitoring |
 | `WORSENED_BY` | Risk factor amplification |
 
 ## 🤖 Generative AI Integration
@@ -103,7 +101,7 @@ See [docs/DATASET.md](docs/DATASET.md) for full methodology.
 **Google Gemini 2.0 Flash** powers four clinical AI functions:
 
 | Function | Purpose |
-|          |         |
+|----------|---------|
 | Entity Extraction | Converts unstructured PDF text into structured diseases, medications, lab values |
 | Clinical Summarisation | Generates 3-4 sentence summaries of prescriptions and lab reports |
 | Risk Explanation | Produces physician-readable explanations for XGBoost risk scores |
