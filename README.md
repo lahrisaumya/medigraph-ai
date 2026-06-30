@@ -170,14 +170,12 @@ medigraph-ai/
 ```
 
 ## 📖 Documentation
-
 Document Description
-
-SETUP.md: (docs/SETUP.md)-Complete step-by-step setup guide including MongoDB and Neo4j configuration
-API.md: (docs/API.md)-Full REST API reference
-DATASET.md: (docs/DATASET.md)-Dataset sources and preprocessing methodology
-DEPLOYMENT.md: (docs/DEPLOYMENT.md)-Cloud deployment instructions
-VIVA_QA.md: (docs/VIVA_QA.md)-24 anticipated viva questions with detailed answers
+1. **SETUP.md**: (docs/SETUP.md)-Complete step-by-step setup guide including MongoDB and Neo4j configuration
+2. **API.md**: (docs/API.md)-Full REST API reference
+3. **DATASET.md**: (docs/DATASET.md)-Dataset sources and preprocessing methodology
+4. **DEPLOYMENT.md**: (docs/DEPLOYMENT.md)-Cloud deployment instructions
+5. **VIVA_QA.md**: (docs/VIVA_QA.md)-24 anticipated viva questions with detailed answers
 
 
 ## Acknowledgements
