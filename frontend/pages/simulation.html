@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>MediGraph AI — Care Simulation</title>
+  <link rel="stylesheet" href="/assets/style.css"/>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <div id="sidebar"></div>
+  <main class="main">
+
+    <div class="page-header">
+      <div class="page-title">🔮 What-If Care Simulation</div>
+      <div class="page-sub">Model different care scenarios to predict patient health outcomes</div>
+    </div>
+
+    <div class="grid-main-aside">
+      <!-- Simulation Form -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+
+        <div class="card">
+          <div class="card-title">⚙️ Patient Baseline Parameters</div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Patient ID *</label>
+              <input id="s-pid" class="form-control" placeholder="e.g. P001"/>
+            </div>
+            <div class="form-group">
+              <label>Age *</label>
+              <input id="s-age" class="form-control" type="number" value="55"/>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Current Adherence Rate: <b id="s-adh-lbl">70%</b></label>
+            <input type="range" id="s-adh" min="0" max="100" value="70"
+                   oninput="el('s-adh-lbl').textContent=this.value+'%'" style="width:100%;accent-color:var(--blue)"/>
+          </div>
+          <div class="form-group">
+            <label>Exercise Level: <b id="s-ex-lbl">4</b>/10</label>
+            <input type="range" id="s-ex" min="1" max="10" value="4"
+                   oninput="el('s-ex-lbl').textContent=this.value" style="width:100%;accent-color:var(--blue)"/>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Follow-up Visits/Year</label>
+              <input id="s-fu" class="form-control" type="number" value="4" min="0"/>
+            </div>
+            <div class="form-group">
+              <label>Comorbidities</label>
+              <input id="s-comorbid" class="form-control" type="number" value="2" min="0"/>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Medication Count</label>
+              <input id="s-medcount" class="form-control" type="number" value="3" min="1"/>
+            </div>
+            <div class="form-group">
+              <label>Hospital Visits (Last Year)</label>
+              <input id="s-hosp" class="form-control" type="number" value="1" min="0"/>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>HbA1c (%)</label>
+              <input id="s-hba1c" class="form-control" type="number" step="0.1" placeholder="e.g. 8.0"/>
+            </div>
+            <div class="form-group">
+              <label>BMI</label>
+              <input id="s-bmi" class="form-control" type="number" step="0.1" placeholder="e.g. 28.5"/>
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-full" id="sim-btn" onclick="runSim()">
+            🔮 Run Simulation
+          </button>
+        </div>
+
+        <!-- Quick slider tool -->
+        <div class="card">
+          <div class="card-title">⚡ Quick Adherence Impact</div>
+          <p style="font-size:12px;color:var(--sub);margin-bottom:12px">Drag to see instant risk impact of changing adherence</p>
+          <div class="form-group">
+            <label>Current Adherence: <b id="q-cur-lbl">70%</b></label>
+            <input type="range" id="q-cur" min="0" max="100" value="70"
+                   oninput="el('q-cur-lbl').textContent=this.value+'%';quickCompare()"
+                   style="width:100%;accent-color:var(--blue)"/>
+          </div>
+          <div class="form-group">
+            <label>Hypothetical Adherence: <b id="q-hyp-lbl">90%</b></label>
+            <input type="range" id="q-hyp" min="0" max="100" value="90"
+                   oninput="el('q-hyp-lbl').textContent=this.value+'%';quickCompare()"
+                   style="width:100%;accent-color:var(--green)"/>
+          </div>
+          <div id="quick-result" class="info-box mt-16">
+            Fill in Patient ID above and adjust sliders to compare
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Results Panel -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <div class="card">
+          <div class="card-title">📊 Baseline Risk</div>
+          <div id="baseline-display">
+            <p class="no-data">Run simulation to see results</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">💡 Overall Recommendation</div>
+          <div id="sim-recommendation">
+            <p class="no-data">Run simulation first</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Scenario Results -->
+    <div id="scenarios-section" style="display:none;margin-top:24px">
+      <div class="chart-box mb-24">
+        <div class="chart-title">Scenario Risk Comparison</div>
+        <div class="chart-inner" id="scenario-chart"></div>
+      </div>
+
+      <div class="scenario-grid" id="scenario-cards"></div>
+
+      <!-- AI Explanations -->
+      <div class="card mt-24">
+        <div class="card-title">🤖 AI Scenario Explanations</div>
+        <div id="ai-explanations"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/utils/api.js"></script>
+<script src="/utils/helpers.js"></script>
+<script src="/utils/charts.js"></script>
+<script src="/components/sidebar.js"></script>
+<script>
+  Sidebar.init("simulation");
+  function getBasePayload() {
+    return {
+      patient_id:                el("s-pid").value.trim(),
+      age:                       parseInt(el("s-age").value),
+      adherence_rate:            parseFloat(el("s-adh").value),
+      exercise_level:            parseInt(el("s-ex").value),
+      follow_up_frequency:       parseInt(el("s-fu").value),
+      comorbidity_count:         parseInt(el("s-comorbid").value),
+      medication_count:          parseInt(el("s-medcount").value),
+      hospital_visits_last_year: parseInt(el("s-hosp").value),
+      hba1c: el("s-hba1c").value ? parseFloat(el("s-hba1c").value) : null,
+      bmi:   el("s-bmi").value   ? parseFloat(el("s-bmi").value)   : null,
+    };
+  }
+
+  async function runSim() {
+    const base = getBasePayload();
+    if (!base.patient_id) { H.toast("Patient ID required","error"); return; }
+
+    el("sim-btn").disabled = true;
+    el("sim-btn").textContent = "⏳ Running…";
+
+    const payload = { patient_id: base.patient_id, base_data: base };
+
+    try {
+      const data = await API.runSimulation(payload);
+
+      el("sim-btn").disabled = false;
+      el("sim-btn").textContent = "🔮 Run Simulation";
+
+      // Baseline display
+      const colorMap = { LOW:"#10B981", MODERATE:"#F59E0B", HIGH:"#EF4444", CRITICAL:"#7C3AED" };
+      const bc = colorMap[data.scenarios?.find(s=>s.label==="Current Behavior")?.risk_level] || "#3B82F6";
+      setHTML("baseline-display",`
+        <div style="text-align:center;padding:16px">
+          <div style="font-size:48px;font-weight:800;color:${bc}">${data.baseline_risk.toFixed(1)}%</div>
+          <div style="color:var(--sub);font-size:13px">Baseline Risk Score</div>
+          ${riskBadge(data.scenarios?.find(s=>s.label==="Current Behavior")?.risk_level||"MODERATE")}
+        </div>`);
+
+      // Recommendation
+      setHTML("sim-recommendation",`<p style="font-size:13px;color:var(--sub);line-height:1.7">${data.recommendation}</p>`);
+
+      // Scenario chart
+      Charts.renderSimulationBars("scenario-chart", data.scenarios||[], data.baseline_risk);
+
+      // Scenario cards
+      const colorFn = s => s >= 75 ? "#7C3AED" : s >= 55 ? "#EF4444" : s >= 35 ? "#F59E0B" : "#10B981";
+      setHTML("scenario-cards", (data.scenarios||[]).map(s=>`
+        <div class="scenario-card">
+          <div class="s-label">${s.label}</div>
+          <div class="s-score" style="color:${colorFn(s.risk_score)}">${s.risk_score.toFixed(1)}%</div>
+          <div class="s-desc">${s.description}</div>
+          ${riskBadge(s.risk_level)}
+          <div class="s-outcome mt-16">${s.predicted_outcome}</div>
+          <div style="font-size:11px;color:var(--sub);margin-top:8px">
+            Adherence: ${s.adherence_rate}% · Exercise: ${s.exercise_level}/10 · Follow-up: ${s.follow_up_frequency}/yr
+          </div>
+        </div>`).join(""));
+
+      // AI Explanations
+      setHTML("ai-explanations", (data.scenarios||[]).map(s=>`
+        <div style="padding:14px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px">
+          <div style="font-weight:700;margin-bottom:6px">${s.label} <span style="color:${colorFn(s.risk_score)}">(${s.risk_score.toFixed(1)}%)</span></div>
+          <p style="font-size:13px;color:var(--sub);line-height:1.6">${s.ai_explanation}</p>
+        </div>`).join(""));
+
+      el("scenarios-section").style.display = "";
+      H.toast("Simulation complete!","success");
+
+    } catch(err) {
+      el("sim-btn").disabled = false;
+      el("sim-btn").textContent = "🔮 Run Simulation";
+      H.toast(`Simulation failed: ${err.message}`,"error");
+    }
+  }
+
+  let quickTimer;
+  async function quickCompare() {
+    const pid = el("s-pid").value.trim();
+    if (!pid) return;
+    clearTimeout(quickTimer);
+    quickTimer = setTimeout(async () => {
+      try {
+        const base = getBasePayload();
+        const params = {
+          patient_id: pid,
+          base_adherence: parseFloat(el("q-cur").value),
+          new_adherence:  parseFloat(el("q-hyp").value),
+          age: base.age,
+          comorbidity_count: base.comorbidity_count,
+          medication_count: base.medication_count,
+          exercise_level: base.exercise_level,
+          follow_up_frequency: base.follow_up_frequency,
+          hospital_visits: base.hospital_visits_last_year,
+        };
+        const res = await API.quickSim(params);
+        const d   = res.data || {};
+        const dir = d.direction === "improving" ? "📉 Risk decreases" : d.direction === "worsening" ? "📈 Risk increases" : "➡️ No change";
+        setHTML("quick-result",`
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <span>Current (${d.base_adherence}%): <b style="color:var(--red)">${(d.current_score||0).toFixed(1)}%</b></span>
+            <span>Hypothetical (${d.new_adherence}%): <b style="color:var(--green)">${(d.modified_score||0).toFixed(1)}%</b></span>
+          </div>
+          <div style="font-size:12px;color:var(--sub)">${dir} by <b>${Math.abs(d.delta||0).toFixed(1)}</b> pts (${Math.abs(d.percent_change||0).toFixed(1)}% relative change)</div>
+        `);
+      } catch(e) { /* silent fail */ }
+    }, 600);
+  }
+</script>
+</body>
+</html>

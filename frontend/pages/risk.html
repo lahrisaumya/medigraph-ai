@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>MediGraph AI — Risk Prediction</title>
+  <link rel="stylesheet" href="/assets/style.css"/>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <div id="sidebar"></div>
+  <main class="main">
+
+    <div class="page-header">
+      <div class="page-title">📈 Risk Prediction</div>
+      <div class="page-sub">XGBoost medication adherence risk engine with Gemini AI explanation</div>
+    </div>
+
+    <div class="grid-main-aside">
+      <!-- Input Form -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+
+        <div class="card">
+          <div class="card-title">⚙️ Patient Risk Assessment</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Patient ID *</label>
+              <input id="r-pid" class="form-control" placeholder="e.g. P001"/>
+            </div>
+            <div class="form-group">
+              <label>Age *</label>
+              <input id="r-age" class="form-control" type="number" value="55"/>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Adherence Rate: <b id="adh-lbl">80%</b></label>
+            <input type="range" id="r-adh" min="0" max="100" value="80"
+                   oninput="el('adh-lbl').textContent=this.value+'%'" style="width:100%;accent-color:var(--blue)"/>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted)"><span>0%</span><span>50%</span><span>100%</span></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Exercise Level: <b id="ex-lbl">5</b>/10</label>
+              <input type="range" id="r-ex" min="1" max="10" value="5"
+                     oninput="el('ex-lbl').textContent=this.value" style="width:100%;accent-color:var(--blue)"/>
+            </div>
+            <div class="form-group">
+              <label>Follow-up Visits/Year</label>
+              <input id="r-fu" class="form-control" type="number" value="4" min="0"/>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Comorbidities</label>
+              <input id="r-comorbid" class="form-control" type="number" value="1" min="0"/>
+            </div>
+            <div class="form-group">
+              <label>Medications Count</label>
+              <input id="r-medcount" class="form-control" type="number" value="2" min="1"/>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Hospital Visits (Last Year)</label>
+              <input id="r-hosp" class="form-control" type="number" value="0" min="0"/>
+            </div>
+            <div class="form-group">
+              <label>HbA1c (%)</label>
+              <input id="r-hba1c" class="form-control" type="number" step="0.1" placeholder="e.g. 7.5"/>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>BMI</label>
+            <input id="r-bmi" class="form-control" type="number" step="0.1" placeholder="e.g. 27.5"/>
+          </div>
+          <button class="btn btn-primary btn-full" id="predict-btn" onclick="runPrediction()">
+            🧠 Predict Risk
+          </button>
+        </div>
+
+        <!-- Risk Trend -->
+        <div class="card">
+          <div class="card-title">📊 Risk Trend History</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <input id="trend-pid" class="form-control" placeholder="Patient ID"/>
+            <button class="btn btn-outline btn-sm" onclick="loadTrend()">Load</button>
+          </div>
+          <div class="chart-inner" id="trend-chart" style="min-height:200px">
+            <p class="no-data">Enter a patient ID to see risk trend</p>
+          </div>
+          <div id="trend-summary" class="mt-16"></div>
+        </div>
+
+      </div>
+
+      <!-- Result Panel -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <!-- Gauge -->
+        <div class="card" id="gauge-card">
+          <div class="card-title">🎯 Risk Score</div>
+          <div id="gauge-container">
+            <p class="no-data">Run a prediction to see results</p>
+          </div>
+        </div>
+
+        <!-- Explanation -->
+        <div class="card" id="explain-card" style="display:none">
+          <div class="card-title">💡 AI Explanation</div>
+          <div id="explanation-box"></div>
+        </div>
+
+        <!-- Risk Factors -->
+        <div class="card" id="factors-card" style="display:none">
+          <div class="card-title">⚠️ Key Risk Factors</div>
+          <div id="factors-list"></div>
+        </div>
+
+        <!-- Recommendations -->
+        <div class="card" id="reco-card" style="display:none">
+          <div class="card-title">✅ Recommendations</div>
+          <div id="reco-list"></div>
+        </div>
+
+        <!-- High Risk Patients -->
+        <div class="card">
+          <div class="card-title">🚨 All High-Risk Patients</div>
+          <div id="all-high-risk"><div class="loader-wrap"><div class="spinner"></div></div></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Model Metrics -->
+    <div class="grid-2 mt-24">
+      <div class="chart-box">
+        <div class="chart-title">Feature Importances (XGBoost)</div>
+        <div class="chart-inner" id="feat-imp-chart"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🤖 Model Performance</div>
+        <div id="model-perf-box"><div class="loader-wrap"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/utils/api.js"></script>
+<script src="/utils/helpers.js"></script>
+<script src="/utils/charts.js"></script>
+<script src="/components/sidebar.js"></script>
+<script>
+  Sidebar.init("risk");
+  function buildGauge(score, level) {
+    const r = 54, circ = 2 * Math.PI * r;
+    const fill = (score / 100) * circ;
+    const colorMap = { LOW: "#10B981", MODERATE: "#F59E0B", HIGH: "#EF4444", CRITICAL: "#7C3AED" };
+    const c = colorMap[level] || "#3B82F6";
+    return `
+    <div class="risk-gauge">
+      <div class="gauge-ring">
+        <svg viewBox="0 0 120 120" width="140" height="140">
+          <circle class="gauge-bg" cx="60" cy="60" r="${r}"/>
+          <circle class="gauge-fill" cx="60" cy="60" r="${r}"
+            stroke="${c}"
+            stroke-dasharray="${fill} ${circ - fill}"
+            stroke-dashoffset="0"/>
+        </svg>
+        <div class="gauge-text">
+          <div class="gauge-score" style="color:${c}">${score.toFixed(1)}%</div>
+          <div class="gauge-label">${level}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  async function runPrediction() {
+    const pid = el("r-pid").value.trim();
+    if (!pid) { H.toast("Patient ID is required","error"); return; }
+
+    el("predict-btn").disabled = true;
+    el("predict-btn").textContent = "⏳ Predicting…";
+
+    const payload = {
+      patient_id:                pid,
+      age:                       parseInt(el("r-age").value),
+      adherence_rate:            parseFloat(el("r-adh").value),
+      exercise_level:            parseInt(el("r-ex").value),
+      follow_up_frequency:       parseInt(el("r-fu").value),
+      comorbidity_count:         parseInt(el("r-comorbid").value),
+      medication_count:          parseInt(el("r-medcount").value),
+      hospital_visits_last_year: parseInt(el("r-hosp").value),
+      hba1c: el("r-hba1c").value ? parseFloat(el("r-hba1c").value) : null,
+      bmi:   el("r-bmi").value   ? parseFloat(el("r-bmi").value)   : null,
+    };
+
+    try {
+      const data = await API.predictRisk(payload);
+      el("predict-btn").disabled = false;
+      el("predict-btn").textContent = "🧠 Predict Risk";
+
+      // Gauge
+      setHTML("gauge-container", buildGauge(data.risk_score, data.risk_level));
+
+      // Explanation
+      setHTML("explanation-box", `
+        <p style="font-size:13px;color:var(--sub);line-height:1.7">${data.explanation}</p>
+        <div class="info-box mt-16">
+          Adherence: ${adherenceBadge(data.adherence_level)}&nbsp;&nbsp;Risk: ${riskBadge(data.risk_level)}
+        </div>`);
+      el("explain-card").style.display = "";
+
+      // Risk factors
+      setHTML("factors-list", (data.key_risk_factors||[]).map(f=>
+        `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--red)">◆</span>
+          <span style="font-size:13px">${f}</span>
+        </div>`).join(""));
+      el("factors-card").style.display = "";
+
+      // Recommendations
+      setHTML("reco-list", (data.recommendations||[]).map(r=>
+        `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--green)">✓</span>
+          <span style="font-size:13px">${r}</span>
+        </div>`).join("") || `<p class="no-data">No recommendations available</p>`);
+      el("reco-card").style.display = "";
+
+      H.toast(`Risk: ${data.risk_score.toFixed(1)}% (${data.risk_level})`,"success");
+    } catch(err) {
+      el("predict-btn").disabled = false;
+      el("predict-btn").textContent = "🧠 Predict Risk";
+      H.toast(`Prediction failed: ${err.message}`,"error");
+    }
+  }
+
+  async function loadTrend() {
+    const pid = el("trend-pid").value.trim();
+    if (!pid) { H.toast("Enter patient ID","error"); return; }
+    try {
+      const res = await API.riskTrend(pid);
+      const d   = res.data || {};
+      Charts.renderRiskTrendLine("trend-chart", d.series || []);
+      if (d.trend) {
+        const icon = d.trend==="improving" ? "📉" : d.trend==="worsening" ? "📈" : "➡️";
+        setHTML("trend-summary",`
+          <div class="info-box">
+            <b>Trend:</b> ${icon} ${d.trend.toUpperCase()} &nbsp;|&nbsp;
+            <b>First:</b> ${(d.first_score||0).toFixed(1)}% → <b>Latest:</b> ${(d.latest_score||0).toFixed(1)}%
+            &nbsp;|&nbsp; <b>Δ:</b> ${(d.delta||0).toFixed(1)} pts
+          </div>`);
+      }
+    } catch(err) { showError("trend-chart", err.message); }
+  }
+
+  async function loadHighRisk() {
+    try {
+      const res  = await API.highRiskPatients();
+      const list = res.data?.patients || [];
+      if (!list.length) { setHTML("all-high-risk","<p class='no-data'>No high-risk patients</p>"); return; }
+      setHTML("all-high-risk", list.slice(0,6).map(p=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-weight:600;font-size:13px">${p.name}</div>
+            <div style="font-size:11px;color:var(--muted)">${p.patient_id} · Age ${p.age}</div>
+          </div>
+          <div style="text-align:right">
+            ${formatScore(p.risk_score)}
+            ${riskBadge(p.risk_level)}
+          </div>
+        </div>`).join(""));
+    } catch(err) { showError("all-high-risk", err.message); }
+  }
+
+  async function loadModelMetrics() {
+    try {
+      const res = await API.modelMetrics();
+      const m   = res.data || {};
+      if (m.feature_importances) Charts.renderFeatureImportance("feat-imp-chart", m.feature_importances);
+      setHTML("model-perf-box",`
+        <div class="grid-2" style="gap:16px;margin-bottom:16px">
+          ${["accuracy","precision","recall","f1_score","roc_auc"].map(k=>
+            `<div style="text-align:center">
+               <div style="font-size:22px;font-weight:800;color:var(--blue)">${m[k]?((m[k]*100).toFixed(1)+"%"):"–"}</div>
+               <div style="font-size:11px;color:var(--sub)">${k.replace("_"," ").toUpperCase()}</div>
+             </div>`).join("")}
+        </div>
+        <div class="info-box">
+          <b>CV F1:</b> ${m.cv_f1_mean||"–"} ± ${m.cv_f1_std||"–"} &nbsp;|&nbsp;
+          <b>Samples:</b> ${m.train_samples||"–"} train / ${m.test_samples||"–"} test
+        </div>
+        ${m.top_features?.length ? `
+          <div style="margin-top:12px;font-size:12px;color:var(--sub)">
+            <b style="color:var(--text)">Top features:</b> ${m.top_features.join(" · ")}
+          </div>` : ""}
+      `);
+    } catch(err) {
+      showError("feat-imp-chart", "Model not trained yet — run python -m backend.ml.train_model");
+      showError("model-perf-box", err.message);
+    }
+  }
+
+  loadHighRisk();
+  loadModelMetrics();
+</script>
+</body>
+</html>

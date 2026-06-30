@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>MediGraph AI — Drug Safety Center</title>
+  <link rel="stylesheet" href="/assets/style.css"/>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <div id="sidebar"></div>
+  <main class="main">
+
+    <div class="page-header">
+      <div class="page-title">💊 Drug Safety Center</div>
+      <div class="page-sub">Real-time drug safety data from OpenFDA — adverse events, warnings, recalls, interactions</div>
+    </div>
+
+    <div class="grid-main-aside">
+      <!-- Search + Results -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+
+        <!-- Drug Search -->
+        <div class="card">
+          <div class="card-title">🔍 Drug Safety Search</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <input id="drug-search" class="form-control" placeholder="Enter drug name (e.g. metformin, aspirin, lisinopril)"
+                   onkeydown="if(event.key==='Enter')searchDrug()"/>
+            <button class="btn btn-primary" onclick="searchDrug()">Search</button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+            <span style="font-size:11px;color:var(--sub)">Quick search:</span>
+            <button class="btn btn-outline btn-sm" onclick="quickSearch('metformin')">metformin</button>
+            <button class="btn btn-outline btn-sm" onclick="quickSearch('lisinopril')">lisinopril</button>
+            <button class="btn btn-outline btn-sm" onclick="quickSearch('atorvastatin')">atorvastatin</button>
+            <button class="btn btn-outline btn-sm" onclick="quickSearch('aspirin')">aspirin</button>
+            <button class="btn btn-outline btn-sm" onclick="quickSearch('amlodipine')">amlodipine</button>
+            <button class="btn btn-outline btn-sm" onclick="quickSearch('furosemide')">furosemide</button>
+          </div>
+        </div>
+
+        <!-- Drug Profile Results -->
+        <div id="drug-profile" style="display:none">
+          <div class="card mb-16">
+            <div class="card-title">💊 Drug Profile</div>
+            <div id="drug-info"></div>
+          </div>
+
+          <div class="chart-box mb-16">
+            <div class="chart-title">Top Adverse Events (FAERS Reports)</div>
+            <div class="chart-inner" id="ae-chart"></div>
+          </div>
+
+          <div class="card mb-16">
+            <div class="card-title">⚠️ FDA Label — Warnings & Contraindications</div>
+            <div id="warnings-box"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">🔄 Recall History</div>
+            <div id="recalls-box"><div class="loader-wrap"><div class="spinner"></div></div></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Panel -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <!-- Drug Interaction Checker -->
+        <div class="card">
+          <div class="card-title">⚡ Drug Interaction Checker</div>
+          <p style="font-size:12px;color:var(--sub);margin-bottom:12px">Check co-occurrence signals in FDA FAERS database</p>
+          <div class="form-group">
+            <label>Drug A</label>
+            <input id="int-a" class="form-control" placeholder="e.g. metformin"/>
+          </div>
+          <div class="form-group">
+            <label>Drug B</label>
+            <input id="int-b" class="form-control" placeholder="e.g. lisinopril"/>
+          </div>
+          <button class="btn btn-outline btn-full" onclick="checkInteraction()">Check Interaction Signal</button>
+          <div id="interaction-result" class="mt-16"></div>
+        </div>
+
+        <!-- Patient Medication Check -->
+        <div class="card">
+          <div class="card-title">👤 Patient Medication Check</div>
+          <div class="form-group">
+            <label>Patient ID</label>
+            <input id="check-pid" class="form-control" placeholder="e.g. P001"/>
+          </div>
+          <div class="form-group">
+            <label>Medications (comma-separated)</label>
+            <textarea id="check-meds" class="form-control" rows="3" placeholder="metformin, lisinopril, atorvastatin"></textarea>
+          </div>
+          <button class="btn btn-outline btn-full" onclick="checkPatientMeds()">Run Safety Check</button>
+          <div id="med-check-result" class="mt-16"></div>
+        </div>
+
+        <!-- Recent Searches -->
+        <div class="card">
+          <div class="card-title">🕐 Recent Searches</div>
+          <div id="recent-searches"><p class="no-data">No searches yet</p></div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/utils/api.js"></script>
+<script src="/utils/helpers.js"></script>
+<script src="/utils/charts.js"></script>
+<script src="/components/sidebar.js"></script>
+<script>
+  Sidebar.init("drugs");
+  const recentSearches = [];
+
+  function quickSearch(name) {
+    el("drug-search").value = name;
+    searchDrug();
+  }
+
+  async function searchDrug() {
+    const name = el("drug-search").value.trim();
+    if (!name) { H.toast("Enter a drug name","error"); return; }
+
+    H.toast(`Searching OpenFDA for "${name}"…`, "info");
+    el("drug-profile").style.display = "none";
+    setHTML("drug-info","<div class='loader-wrap'><div class='spinner'></div><p>Fetching FDA data…</p></div>");
+
+    try {
+      const data = await API.drugSearch(name);
+
+      // Drug info card
+      setHTML("drug-info",`
+        <div class="grid-2" style="gap:16px;margin-bottom:16px">
+          <div>
+            <div style="font-size:22px;font-weight:800;color:var(--text)">${data.drug_name}</div>
+            ${data.generic_name ? `<div style="color:var(--sub);font-size:13px">Generic: ${data.generic_name}</div>` : ""}
+            ${data.manufacturer ? `<div style="color:var(--muted);font-size:12px">${data.manufacturer}</div>` : ""}
+            ${data.brand_names?.length ? `<div style="margin-top:8px">${data.brand_names.map(b=>`<span class="tag">${b}</span>`).join(" ")}</div>` : ""}
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:28px;font-weight:800;color:var(--red)">${(data.total_reports||0).toLocaleString()}</div>
+            <div style="font-size:11px;color:var(--sub)">Total FAERS Reports</div>
+          </div>
+        </div>
+        ${data.indications?.length ? `
+          <div class="info-box">
+            <b>Approved Indications:</b><br>
+            <span style="font-size:12px">${data.indications[0]}</span>
+          </div>` : ""}
+      `);
+
+      // Adverse events chart
+      if (data.top_adverse_events?.length)
+        Charts.renderAdverseEvents("ae-chart", data.top_adverse_events);
+      else
+        setHTML("ae-chart","<p class='no-data'>No adverse event data available</p>");
+
+      // Warnings
+      const warnItems = [...(data.warnings||[]),...(data.contraindications||[])];
+      setHTML("warnings-box", warnItems.length ? warnItems.map((w,i)=>`
+        <div class="warning-box" style="margin-bottom:8px">
+          <b>${i < (data.warnings||[]).length ? "⚠️ Warning" : "🚫 Contraindication"}:</b><br>
+          <span style="font-size:12px">${w}</span>
+        </div>`).join("") : `<p class="no-data">No warnings found in FDA label</p>`);
+
+      el("drug-profile").style.display = "";
+
+      // Recalls (async)
+      loadRecalls(name);
+
+      // Recent searches
+      if (!recentSearches.includes(name)) { recentSearches.unshift(name); if(recentSearches.length>6) recentSearches.pop(); }
+      setHTML("recent-searches", recentSearches.map(s=>
+        `<div style="padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px" onclick="quickSearch('${s}')">${s}</div>`
+      ).join(""));
+
+      H.toast(`Drug profile loaded for ${name}`,"success");
+    } catch(err) {
+      setHTML("drug-info",`<div class="error-box">⚠️ ${err.message}</div>`);
+      el("drug-profile").style.display = "";
+    }
+  }
+
+  async function loadRecalls(name) {
+    setHTML("recalls-box","<div class='loader-wrap'><div class='spinner'></div></div>");
+    try {
+      const res  = await API.drugRecalls(name);
+      const list = res.data?.recalls || [];
+      if (!list.length) { setHTML("recalls-box","<p class='no-data'>No recalls found for this drug</p>"); return; }
+      setHTML("recalls-box", list.map(r=>`
+        <div style="padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <b style="font-size:13px">${r.recall_number}</b>
+            <span class="badge ${r.status==="Ongoing"?"badge-critical":"badge-moderate"}">${r.status}</span>
+          </div>
+          <div style="font-size:11px;color:var(--sub);margin-bottom:4px">${r.product.slice(0,120)}</div>
+          <div style="font-size:11px;color:var(--muted)"><b>Reason:</b> ${r.reason.slice(0,160)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Date: ${r.date}</div>
+        </div>`).join(""));
+    } catch(err) {
+      setHTML("recalls-box","<p class='no-data'>Could not load recall data</p>");
+    }
+  }
+
+  async function checkInteraction() {
+    const a = el("int-a").value.trim();
+    const b = el("int-b").value.trim();
+    if (!a || !b) { H.toast("Enter both drug names","error"); return; }
+    setHTML("interaction-result","<div class='loader-wrap'><div class='spinner'></div></div>");
+    try {
+      const res = await API.drugInteractions(a, b);
+      const d   = res.data || {};
+      const sig = d.signal_strength;
+      const cls = sig==="HIGH" ? "badge-critical" : sig==="MODERATE" ? "badge-high" : sig==="LOW" ? "badge-moderate" : "badge-low";
+      setHTML("interaction-result",`
+        <div style="padding:14px;border:1px solid var(--border);border-radius:8px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <b>${a} + ${b}</b>
+            <span class="badge ${cls}">${sig} SIGNAL</span>
+          </div>
+          <div style="font-size:13px;color:var(--sub)">Co-reports: <b style="color:var(--text)">${(d.co_report_count||0).toLocaleString()}</b></div>
+          ${d.co_reported_events?.length ? `
+            <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+              Top co-reported events: ${d.co_reported_events.slice(0,5).map(e=>`<span class="tag">${e.term}</span>`).join(" ")}
+            </div>` : ""}
+          <div class="warning-box mt-16" style="font-size:11px">${d.disclaimer}</div>
+        </div>`);
+    } catch(err) { H.showError("interaction-result", err.message); }
+  }
+
+  async function checkPatientMeds() {
+    const pid  = el("check-pid").value.trim();
+    const meds = el("check-meds").value.trim();
+    if (!pid || !meds) { H.toast("Enter Patient ID and medications","error"); return; }
+    setHTML("med-check-result","<div class='loader-wrap'><div class='spinner'></div><p>Checking…</p></div>");
+    try {
+      const medList = meds.split(",").map(m=>m.trim()).filter(Boolean);
+      const res  = await API.patientMedCheck({ patient_id: pid, medications: medList });
+      const d    = res.data || {};
+      setHTML("med-check-result",`
+        <div class="${d.flagged>0?'warning-box':'success-box'} mb-12">
+          ${d.flagged>0 ? `⚠️ ${d.flagged} medication(s) flagged` : "✅ No significant flags found"}
+        </div>
+        ${(d.results||[]).map(r=>`
+          <div style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between">
+              <b>${r.medication}</b>
+              <span class="${r.has_recall?'badge-critical':'badge-low'} badge">${r.has_recall?"⚠️ Recall":"✅ No Recall"}</span>
+            </div>
+            <div style="font-size:11px;color:var(--sub);margin-top:4px">
+              FAERS reports: ${(r.total_ae_reports||0).toLocaleString()}
+              ${r.top_adverse_events?.length ? ` · Top AE: ${r.top_adverse_events[0].term}` : ""}
+            </div>
+          </div>`).join("")}`);
+    } catch(err) { H.showError("med-check-result", err.message); }
+  }
+</script>
+</body>
+</html>

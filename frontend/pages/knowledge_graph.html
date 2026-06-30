@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>MediGraph AI — Knowledge Graph</title>
+  <link rel="stylesheet" href="/assets/style.css"/>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    .graph-container { position:relative; background:var(--card); border-radius:12px; border:1px solid var(--border); overflow:hidden; }
+    .graph-zoom-controls { position:absolute; top:12px; right:12px; display:flex; flex-direction:column; gap:6px; z-index:10; }
+    .zoom-btn { width:32px; height:32px; border-radius:8px; background:var(--surface); border:1px solid var(--border);
+                color:var(--text); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+                transition:.2s; font-weight:600; }
+    .zoom-btn:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .graph-legend { display:flex; flex-wrap:wrap; gap:12px; padding:12px 16px; border-top:1px solid var(--border); }
+    .legend-item { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--sub); }
+    .legend-shape { width:14px; height:14px; flex-shrink:0; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div id="sidebar"></div>
+  <main class="main">
+
+    <div class="page-header">
+      <div class="page-title">🧠 Healthcare Knowledge Graph</div>
+      <div class="page-sub">Neo4j graph of patients, diseases, medications, symptoms, lab tests, and risk factors</div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid mb-24" id="kg-kpis">
+      <div class="loader-wrap"><div class="spinner"></div></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card mb-24">
+      <div class="card-title">🔍 Graph Explorer</div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+        <div style="flex:1;min-width:160px">
+          <label class="form-group" style="display:block">
+            <span style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px">View Mode</span>
+            <select id="view-mode" class="form-control" onchange="onModeChange()">
+              <option value="summary">Full Graph Summary</option>
+              <option value="patient">Patient Subgraph</option>
+              <option value="disease">Disease Network</option>
+              <option value="medication">Medication Network</option>
+              <option value="highrisk">High-Risk Patients</option>
+            </select>
+          </label>
+        </div>
+        <div style="flex:2;min-width:200px;display:none" id="entity-input-wrap">
+          <label class="form-group" style="display:block">
+            <span style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px" id="entity-label">Patient / Disease / Medication</span>
+            <input id="entity-input" class="form-control" placeholder="e.g. P001 or type 2 diabetes"/>
+          </label>
+        </div>
+        <button class="btn btn-primary" onclick="loadGraph()">🔍 Load Graph</button>
+        <button class="btn btn-outline" onclick="loadStats()">📊 Refresh Stats</button>
+      </div>
+    </div>
+
+    <div class="grid-main-aside">
+      <!-- Graph canvas -->
+      <div>
+        <div class="graph-container">
+          <!-- Zoom Controls -->
+          <div class="graph-zoom-controls">
+            <button class="zoom-btn" onclick="zoomIn()" title="Zoom In">+</button>
+            <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out">−</button>
+            <button class="zoom-btn" onclick="zoomReset()" title="Reset" style="font-size:11px">⊙</button>
+          </div>
+          <svg id="graph-canvas"></svg>
+        </div>
+
+        <!-- Legend with shapes -->
+        <div class="graph-legend">
+          <div class="legend-item">
+            <svg class="legend-shape" viewBox="0 0 14 14">
+              <circle cx="7" cy="7" r="6" fill="#3B82F6"/>
+            </svg>Patient
+          </div>
+          <div class="legend-item">
+            <svg class="legend-shape" viewBox="0 0 14 14">
+              <rect x="1" y="3" width="12" height="8" rx="2" fill="#EF4444"/>
+            </svg>Disease
+          </div>
+          <div class="legend-item">
+            <svg class="legend-shape" viewBox="0 0 14 14">
+              <rect x="1" y="3" width="12" height="8" rx="4" fill="#10B981"/>
+            </svg>Medication
+          </div>
+          <div class="legend-item">
+            <svg class="legend-shape" viewBox="0 0 14 14">
+              <polygon points="7,1 13,13 1,13" fill="#F59E0B"/>
+            </svg>Symptom
+          </div>
+          <div class="legend-item">
+            <svg class="legend-shape" viewBox="0 0 14 14">
+              <polygon points="7,1 13,7 7,13 1,7" fill="#8B5CF6"/>
+            </svg>LabTest
+          </div>
+          <div class="legend-item">
+            <svg class="legend-shape" viewBox="0 0 14 14">
+              <polygon points="7,1 12,4 12,10 7,13 2,10 2,4" fill="#EC4899"/>
+            </svg>RiskFactor
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats panel -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <div class="card-title">📊 Graph Analytics</div>
+          <div id="graph-analytics"><div class="loader-wrap"><div class="spinner"></div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">🦠 Top Diseases</div>
+          <div id="top-diseases"><div class="loader-wrap"><div class="spinner"></div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">💊 Top Medications</div>
+          <div id="top-meds"><div class="loader-wrap"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Node type chart -->
+    <div class="chart-box mt-24">
+      <div class="chart-title">Node Type Distribution</div>
+      <div class="chart-inner" id="node-type-chart"></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/utils/api.js"></script>
+<script src="/utils/helpers.js"></script>
+<script src="/utils/charts.js"></script>
+<script src="/components/sidebar.js"></script>
+<script>
+  Sidebar.init("knowledge-graph");
+
+  const NODE_COLORS = {
+    Patient:"#3B82F6", Disease:"#EF4444", Medication:"#10B981",
+    Symptom:"#F59E0B", LabTest:"#8B5CF6", RiskFactor:"#EC4899", Unknown:"#64748B"
+  };
+
+  // ── Zoom state ────────────────────────────────────────────────────────────
+  let simulation;
+  let svgZoom;
+  let currentTransform = d3.zoomIdentity;
+
+  function zoomIn()    { d3.select("#graph-canvas").transition().duration(300).call(svgZoom.scaleBy, 1.4); }
+  function zoomOut()   { d3.select("#graph-canvas").transition().duration(300).call(svgZoom.scaleBy, 0.7); }
+  function zoomReset() { d3.select("#graph-canvas").transition().duration(400).call(svgZoom.transform, d3.zoomIdentity); }
+
+  // ── Node shape renderer ───────────────────────────────────────────────────
+  // Patient    → circle
+  // Disease    → rounded rectangle
+  // Medication → pill (wide rounded rect)
+  // Symptom    → triangle
+  // LabTest    → diamond
+  // RiskFactor → hexagon
+
+  function appendNodeShape(selection) {
+    selection.each(function(d) {
+      const g    = d3.select(this);
+      const col  = NODE_COLORS[d.type] || NODE_COLORS.Unknown;
+      const name = (d.label || d.type || "").slice(0, 13);
+
+      if (d.type === "Patient") {
+        g.append("circle").attr("r",40).attr("fill",col)
+          .attr("stroke","#0F172A").attr("stroke-width",2.5);
+        g.append("text").text(name)
+          .attr("text-anchor","middle").attr("dominant-baseline","central")
+          .attr("font-size","9").attr("font-weight","600").attr("fill","#fff")
+          .attr("pointer-events","none");
+
+      } else if (d.type === "Disease") {
+        g.append("rect").attr("x",-52).attr("y",-19).attr("width",104).attr("height",38)
+          .attr("rx",6).attr("fill",col).attr("stroke","#0F172A").attr("stroke-width",2);
+        g.append("text").text(name)
+          .attr("text-anchor","middle").attr("dominant-baseline","central")
+          .attr("font-size","8").attr("font-weight","600").attr("fill","#fff")
+          .attr("pointer-events","none");
+
+      } else if (d.type === "Medication") {
+        g.append("rect").attr("x",-52).attr("y",-16).attr("width",104).attr("height",32)
+          .attr("rx",16).attr("fill",col).attr("stroke","#0F172A").attr("stroke-width",2);
+        g.append("text").text(name)
+          .attr("text-anchor","middle").attr("dominant-baseline","central")
+          .attr("font-size","8").attr("font-weight","600").attr("fill","#fff")
+          .attr("pointer-events","none");
+
+      } else if (d.type === "Symptom") {
+        g.append("polygon").attr("points","0,-46 42,26 -42,26")
+          .attr("fill",col).attr("stroke","#0F172A").attr("stroke-width",2);
+        g.append("text").text(name)
+          .attr("text-anchor","middle").attr("dy","10px")
+          .attr("dominant-baseline","central")
+          .attr("font-size","7.5").attr("font-weight","600").attr("fill","#fff")
+          .attr("pointer-events","none");
+
+      } else if (d.type === "LabTest") {
+        g.append("polygon").attr("points","0,-38 38,0 0,38 -38,0")
+          .attr("fill",col).attr("stroke","#0F172A").attr("stroke-width",2);
+        g.append("text").text(name)
+          .attr("text-anchor","middle").attr("dominant-baseline","central")
+          .attr("font-size","7.5").attr("font-weight","600").attr("fill","#fff")
+          .attr("pointer-events","none");
+
+      } else if (d.type === "RiskFactor") {
+        const r = 38;
+        const pts = d3.range(6).map(i=>{
+          const a = Math.PI/180*(60*i-30);
+          return [r*Math.cos(a), r*Math.sin(a)].join(",");
+        }).join(" ");
+        g.append("polygon").attr("points",pts)
+          .attr("fill",col).attr("stroke","#0F172A").attr("stroke-width",2);
+        g.append("text").text(name.slice(0,11))
+          .attr("text-anchor","middle").attr("dominant-baseline","central")
+          .attr("font-size","7.5").attr("font-weight","600").attr("fill","#fff")
+          .attr("pointer-events","none");
+
+      } else {
+        g.append("circle").attr("r",24).attr("fill",col)
+          .attr("stroke","#0F172A").attr("stroke-width",2);
+        g.append("text").text(name)
+          .attr("text-anchor","middle").attr("dominant-baseline","central")
+          .attr("font-size","8").attr("fill","#fff")
+          .attr("pointer-events","none");
+      }
+    });
+  }
+
+  // ── D3 Force Graph ────────────────────────────────────────────────────────
+  function renderD3Graph(nodes, relationships) {
+    const svg  = d3.select("#graph-canvas");
+    svg.selectAll("*").remove();
+
+    const W    = svg.node().parentElement.clientWidth || 700;
+    const H_SZ = 520;
+    svg.attr("width", W).attr("height", H_SZ);
+
+    if (!nodes.length) {
+      svg.append("text").attr("x",W/2).attr("y",H_SZ/2)
+        .attr("text-anchor","middle").attr("fill","#64748B").attr("font-size","14")
+        .text("No graph data — select a mode and load");
+      return;
+    }
+
+    const g = svg.append("g");
+
+    // Zoom behaviour
+    svgZoom = d3.zoom().scaleExtent([0.1, 4]).on("zoom", e => {
+      currentTransform = e.transform;
+      g.attr("transform", e.transform);
+    });
+    svg.call(svgZoom);
+
+    // Arrow marker for directed edges
+    svg.append("defs").append("marker")
+      .attr("id","arrow").attr("viewBox","0 -5 10 10").attr("refX",22)
+      .attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto")
+      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill","#475569");
+
+    // Links
+    const link = g.append("g").selectAll("line")
+      .data(relationships).join("line")
+      .attr("stroke","#334155").attr("stroke-width",1.5).attr("stroke-opacity",0.8)
+      .attr("marker-end","url(#arrow)");
+
+    // Link labels
+    const linkLabel = g.append("g").selectAll("text")
+      .data(relationships).join("text")
+      .text(d => (d.relationship_type||"").replace(/_/g," "))
+      .attr("font-size","7").attr("fill","#64748B").attr("text-anchor","middle")
+      .attr("pointer-events","none");
+
+    // Node groups with shapes
+    const node = g.append("g").selectAll("g")
+      .data(nodes).join("g")
+      .call(appendNodeShape)
+      .call(d3.drag()
+        .on("start",(e,d)=>{ if(!e.active) simulation.alphaTarget(.3).restart(); d.fx=d.x; d.fy=d.y; })
+        .on("drag", (e,d)=>{ d.fx=e.x; d.fy=e.y; })
+        .on("end",  (e,d)=>{ if(!e.active) simulation.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+    // Tooltip on hover
+    node.append("title").text(d =>
+      `${d.type}: ${d.label}\n${Object.entries(d.properties||{}).slice(0,5).map(([k,v])=>`${k}: ${v}`).join("\n")}`);
+
+    // Force simulation
+    const charge = nodes.length > 30 ? -300 : -400;
+    const dist   = nodes.length > 30 ? 120  : 150;
+
+    simulation = d3.forceSimulation(nodes)
+      .force("link",      d3.forceLink(relationships).id(d=>d.id).distance(dist).strength(.6))
+      .force("charge",    d3.forceManyBody().strength(charge))
+      .force("center",    d3.forceCenter(W/2, H_SZ/2))
+      .force("collision", d3.forceCollide().radius(52));
+
+    simulation.on("tick", () => {
+      link.attr("x1",d=>d.source.x).attr("y1",d=>d.source.y)
+          .attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+      linkLabel.attr("x",d=>(d.source.x+d.target.x)/2)
+               .attr("y",d=>(d.source.y+d.target.y)/2);
+      node.attr("transform", d=>`translate(${d.x},${d.y})`);
+    });
+
+    // Auto fit after simulation settles
+    setTimeout(() => {
+      const bounds = g.node().getBBox();
+      if (bounds.width > 0) {
+        const scale = Math.min(0.9, Math.min(W/bounds.width, H_SZ/bounds.height) * 0.85);
+        const tx = (W - bounds.width * scale) / 2 - bounds.x * scale;
+        const ty = (H_SZ - bounds.height * scale) / 2 - bounds.y * scale;
+        svg.transition().duration(600).call(
+          svgZoom.transform,
+          d3.zoomIdentity.translate(tx, ty).scale(scale)
+        );
+      }
+    }, 1800);
+  }
+
+  // ── Mode change ───────────────────────────────────────────────────────────
+  function onModeChange() {
+    const mode = el("view-mode").value;
+    const wrap = el("entity-input-wrap");
+    const lbl  = el("entity-label");
+    if (mode === "patient")         { wrap.style.display=""; lbl.textContent="Patient ID"; el("entity-input").placeholder="e.g. P001"; }
+    else if (mode === "disease")    { wrap.style.display=""; lbl.textContent="Disease Name"; el("entity-input").placeholder="e.g. type 2 diabetes"; }
+    else if (mode === "medication") { wrap.style.display=""; lbl.textContent="Medication Name"; el("entity-input").placeholder="e.g. metformin"; }
+    else { wrap.style.display="none"; if(el("entity-input")) el("entity-input").value=""; }
+  }
+
+  // ── Load graph ────────────────────────────────────────────────────────────
+  async function loadGraph() {
+    const mode   = el("view-mode").value;
+    const entity = el("entity-input")?.value.trim();
+    const svgEl  = el("graph-canvas");
+
+    // Validate entity when required
+    if ((mode === "patient" || mode === "disease" || mode === "medication") && !entity) {
+      const hint = mode === "patient" ? "Enter a Patient ID (e.g. P001)" :
+                   mode === "disease" ? "Enter a disease name (e.g. type 2 diabetes)" :
+                                        "Enter a medication name (e.g. metformin)";
+      H.toast(hint, "warning");
+      svgEl.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="#F59E0B" font-size="14" dominant-baseline="middle">⚠ ${hint}</text>`;
+      return;
+    }
+
+    svgEl.innerHTML = `<text x="50%" y="240" text-anchor="middle" fill="#64748B" font-size="14">Loading graph…</text>`;
+
+    try {
+      let res;
+      if      (mode === "patient")    res = await API.patientGraph(entity);
+      else if (mode === "disease")    res = await API.diseaseGraph(entity);
+      else if (mode === "medication") res = await API.medicationGraph(entity);
+      else if (mode === "highrisk")   res = await API.highRiskGraph();
+      else                            res = await API.highRiskGraph(); // Full Graph Summary → show high risk
+
+      const gd   = res.data || {};
+      const rels = (gd.relationships||[]).map(r => ({ ...r, source:r.source_id, target:r.target_id }));
+
+      if (!gd.nodes || gd.nodes.length === 0) {
+        svgEl.innerHTML = `<text x="50%" y="240" text-anchor="middle" fill="#64748B" font-size="14">No data found — try Patient Subgraph with P001</text>`;
+        return;
+      }
+      renderD3Graph(gd.nodes, rels);
+      H.toast(`✅ Graph loaded: ${gd.node_count} nodes, ${gd.relationship_count} relationships`, "success");
+    } catch(err) {
+      svgEl.innerHTML = `<text x="50%" y="240" text-anchor="middle" fill="#EF4444" font-size="13">Error: ${err.message}</text>`;
+    }
+  }
+
+  // ── Load stats ────────────────────────────────────────────────────────────
+  async function loadStats() {
+    try {
+      const res = await API.graphStats();
+      const d   = res.data || {};
+
+      setHTML("kg-kpis",`
+        ${kpiCard("🔵","Total Nodes",     (d.total_nodes||0).toLocaleString(),  "All node types", "#3B82F6")}
+        ${kpiCard("🔗","Relationships",   (d.total_relationships||0).toLocaleString(),"All edge types","#10B981")}
+        ${kpiCard("👥","Patients",         d.node_type_counts?.Patient||0,       "In graph",       "#0EA5E9")}
+        ${kpiCard("🦠","Diseases",         d.node_type_counts?.Disease||0,       "Unique",         "#EF4444")}
+        ${kpiCard("💊","Medications",      d.node_type_counts?.Medication||0,    "Unique",         "#F59E0B")}
+        ${kpiCard("🔬","Lab Tests",        d.node_type_counts?.LabTest||0,       "Unique",         "#8B5CF6")}
+      `);
+
+      Charts.renderNodeTypeBars("node-type-chart", d.node_type_counts || {});
+
+      setHTML("graph-analytics",`
+        <div style="font-size:13px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--sub)">Total Nodes</span><b>${(d.total_nodes||0).toLocaleString()}</b></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--sub)">Total Relationships</span><b>${(d.total_relationships||0).toLocaleString()}</b></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--sub)">Avg Connections/Patient</span><b>${d.avg_connections_per_patient||0}</b></div>
+          <hr class="divider"/>
+          ${Object.entries(d.relationship_type_counts||{}).map(([k,v])=>
+            `<div style="display:flex;justify-content:space-between"><span style="color:var(--sub)">${k}</span><b>${v}</b></div>`).join("")}
+        </div>`);
+
+      setHTML("top-diseases", (d.top_diseases||[]).slice(0,6).map(t=>
+        `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <span>${t.disease}</span><b>${t.patient_count} patients</b></div>`).join("") || `<p class="no-data">No data</p>`);
+
+      setHTML("top-meds", (d.top_medications||[]).slice(0,6).map(t=>
+        `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <span>${t.medication}</span><b>${t.patient_count} patients</b></div>`).join("") || `<p class="no-data">No data</p>`);
+
+    } catch(err) {
+      showError("kg-kpis", err.message);
+    }
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  loadStats();
+  onModeChange();
+  // Auto-load high-risk graph on page open
+  setTimeout(() => loadGraph(), 800);
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.pkl
+backend/ml/saved_models/
+data/diabetic_data.csv
+data/mimic/LABEVENTS.csv
+data/mimic/PRESCRIPTIONS.csv
+data/patient_features.csv
+fix_*.py
+test_neo4j.py
+.DS_Store
+Thumbs.db

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>MediGraph AI — Document Intelligence</title>
+  <link rel="stylesheet" href="/assets/style.css"/>
+</head>
+<body>
+<div class="app">
+  <div id="sidebar"></div>
+  <main class="main">
+
+    <div class="page-header">
+      <div class="page-title">📄 Document Intelligence</div>
+      <div class="page-sub">Upload healthcare PDFs — AI extracts entities, builds knowledge graph, and predicts risk</div>
+    </div>
+
+    <div class="grid-main-aside">
+      <!-- Upload Panel -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+
+        <div class="card">
+          <div class="card-title">📤 Upload Healthcare Document</div>
+
+          <!-- Patient fields -->
+          <div class="form-row mb-16">
+            <div class="form-group">
+              <label>Patient ID *</label>
+              <input id="inp-pid" class="form-control" placeholder="e.g. P001" />
+            </div>
+            <div class="form-group">
+              <label>Patient Name *</label>
+              <input id="inp-name" class="form-control" placeholder="Full name" />
+            </div>
+          </div>
+          <div class="form-row mb-16">
+            <div class="form-group">
+              <label>Document Type</label>
+              <select id="inp-doctype" class="form-control">
+                <option value="prescription">Prescription</option>
+                <option value="lab_report">Lab Report</option>
+                <option value="medical_summary">Medical Summary</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Age</label>
+              <input id="inp-age" class="form-control" type="number" value="50" min="1" max="120"/>
+            </div>
+          </div>
+          <div class="form-row mb-16">
+            <div class="form-group">
+              <label>Adherence Rate (%)</label>
+              <div class="range-wrap">
+                <input type="range" id="inp-adh" min="0" max="100" value="80" oninput="el('adh-val').textContent=this.value+'%'"/>
+                <span class="range-val" id="adh-val">80%</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Exercise Level (1-10)</label>
+              <div class="range-wrap">
+                <input type="range" id="inp-ex" min="1" max="10" value="5" oninput="el('ex-val').textContent=this.value"/>
+                <span class="range-val" id="ex-val">5</span>
+              </div>
+            </div>
+          </div>
+          <div class="form-row mb-16">
+            <div class="form-group">
+              <label>Known Conditions (comma-separated)</label>
+              <input id="inp-conds" class="form-control" placeholder="type 2 diabetes, hypertension"/>
+            </div>
+            <div class="form-group">
+              <label>Current Medications (comma-separated)</label>
+              <input id="inp-meds" class="form-control" placeholder="metformin, lisinopril"/>
+            </div>
+          </div>
+          <div class="form-row mb-16">
+            <div class="form-group">
+              <label>Comorbidity Count</label>
+              <input id="inp-comorbid" class="form-control" type="number" value="1" min="0"/>
+            </div>
+            <div class="form-group">
+              <label>HbA1c (%)</label>
+              <input id="inp-hba1c" class="form-control" type="number" step="0.1" placeholder="e.g. 8.5"/>
+            </div>
+          </div>
+
+          <!-- Drop zone -->
+          <div class="upload-zone" id="drop-zone" onclick="el('file-input').click()">
+            <div class="upload-icon">📁</div>
+            <p id="drop-label">Drop PDF here or click to browse</p>
+            <p class="upload-hint">Supports: prescriptions, lab reports, medical summaries (max 10 MB)</p>
+          </div>
+          <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="onFileSelect(this)"/>
+
+          <button class="btn btn-primary btn-full mt-16" id="upload-btn" onclick="uploadDoc()" disabled>
+            🚀 Upload & Analyse
+          </button>
+          <div id="upload-progress" style="display:none" class="info-box mt-16">
+            <div class="spinner" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:8px"></div>
+            Processing document through all 4 AI agents…
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div class="card" id="results-card" style="display:none">
+          <div class="card-title">✅ Extraction Results</div>
+          <div id="results-body"></div>
+        </div>
+      </div>
+
+      <!-- Right panel -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <!-- Document History -->
+        <div class="card">
+          <div class="card-title">📋 Patient Document History</div>
+          <div class="form-group">
+            <label>Patient ID</label>
+            <div style="display:flex;gap:8px">
+              <input id="hist-pid" class="form-control" placeholder="e.g. P001"/>
+              <button class="btn btn-outline btn-sm" onclick="loadHistory()">Load</button>
+            </div>
+          </div>
+          <div id="history-list"></div>
+        </div>
+
+        <!-- Quick text analysis -->
+        <div class="card">
+          <div class="card-title">📝 Analyse Pasted Text</div>
+          <div class="form-group">
+            <label>Patient ID</label>
+            <input id="text-pid" class="form-control" placeholder="e.g. P001"/>
+          </div>
+          <div class="form-group">
+            <label>Paste Clinical Text</label>
+            <textarea id="text-input" class="form-control" rows="5" placeholder="Paste prescription text, lab results, or clinical notes…"></textarea>
+          </div>
+          <button class="btn btn-outline btn-full" onclick="analyzeText()">🔍 Extract Entities</button>
+          <div id="text-results" class="mt-16"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/utils/api.js"></script>
+<script src="/utils/helpers.js"></script>
+<script src="/components/sidebar.js"></script>
+<script>
+  Sidebar.init("documents");
+  let selectedFile = null;
+
+  function onFileSelect(input) {
+    selectedFile = input.files[0];
+    if (selectedFile) {
+      el("drop-label").textContent = `📎 ${selectedFile.name} (${(selectedFile.size/1024/1024).toFixed(2)} MB)`;
+      el("upload-btn").disabled = false;
+    }
+  }
+
+  // Drag-and-drop
+  const dz = el("drop-zone");
+  dz.addEventListener("dragover",  e => { e.preventDefault(); dz.classList.add("drag-over"); });
+  dz.addEventListener("dragleave", () => dz.classList.remove("drag-over"));
+  dz.addEventListener("drop", e => {
+    e.preventDefault(); dz.classList.remove("drag-over");
+    selectedFile = e.dataTransfer.files[0];
+    if (selectedFile) { el("drop-label").textContent = `📎 ${selectedFile.name}`; el("upload-btn").disabled = false; }
+  });
+
+  async function uploadDoc() {
+    const pid  = el("inp-pid").value.trim();
+    const name = el("inp-name").value.trim();
+    if (!pid || !name) { H.toast("Patient ID and Name are required", "error"); return; }
+    if (!selectedFile)  { H.toast("Please select a PDF file", "error"); return; }
+
+    el("upload-btn").disabled = true;
+    el("upload-progress").style.display = "";
+    el("results-card").style.display    = "none";
+
+    const fd = new FormData();
+    fd.append("file",                selectedFile);
+    fd.append("patient_id",          pid);
+    fd.append("patient_name",        name);
+    fd.append("document_type",       el("inp-doctype").value);
+    fd.append("age",                 el("inp-age").value);
+    fd.append("adherence_rate",      el("inp-adh").value);
+    fd.append("exercise_level",      el("inp-ex").value);
+    fd.append("conditions",          el("inp-conds").value);
+    fd.append("medications",         el("inp-meds").value);
+    fd.append("comorbidity_count",   el("inp-comorbid").value);
+    fd.append("hba1c",               el("inp-hba1c").value || "");
+
+    try {
+      const data = await API.uploadDocument(fd);
+      el("upload-progress").style.display = "none";
+      el("upload-btn").disabled = false;
+      displayResults(data);
+      H.toast("Document processed successfully!", "success");
+    } catch (err) {
+      el("upload-progress").style.display = "none";
+      el("upload-btn").disabled = false;
+      H.toast(`Upload failed: ${err.message}`, "error");
+    }
+  }
+
+  function displayResults(data) {
+    const e = data.extracted_entities || {};
+    const ents = [
+      { label:"🦠 Diseases",     items: e.diseases     || [] },
+      { label:"💊 Medications",   items: e.medications  || [] },
+      { label:"🔬 Lab Tests",     items: e.lab_tests    || [] },
+      { label:"😷 Symptoms",      items: e.symptoms     || [] },
+      { label:"⚠️ Risk Factors",  items: e.risk_factors || [] },
+    ];
+
+    const entityHtml = ents.map(g =>
+      g.items.length ? `
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:6px">${g.label}</div>
+          <div>${g.items.map(i=>`<span class="tag">${i}</span>`).join(" ")}</div>
+        </div>` : ""
+    ).join("");
+
+    const labHtml = Object.keys(e.lab_values||{}).length ? `
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:6px">📊 Lab Values</div>
+        ${Object.entries(e.lab_values).map(([k,v])=>`<span class="tag">${k}: <b>${v}</b></span>`).join(" ")}
+      </div>` : "";
+
+    setHTML("results-body", `
+      <div class="success-box mb-16">
+        <b>Processing complete</b> in ${data.processing_time_ms?.toFixed(0)}ms &nbsp;|&nbsp;
+        Status: ${data.status}
+      </div>
+      <div class="info-box mb-16"><b>AI Summary:</b><br><span style="color:var(--sub)">${data.summary}</span></div>
+      ${entityHtml}${labHtml}
+      ${Object.keys(e.dosages||{}).length ? `
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:6px">💉 Dosages</div>
+          ${Object.entries(e.dosages).map(([k,v])=>`<span class="tag">${k}: <b>${v}</b></span>`).join(" ")}
+        </div>` : ""}
+    `);
+    el("results-card").style.display = "";
+  }
+
+  async function loadHistory() {
+    const pid = el("hist-pid").value.trim();
+    if (!pid) { H.toast("Enter a Patient ID","error"); return; }
+    setHTML("history-list","<div class='loader-wrap'><div class='spinner'></div></div>");
+    try {
+      const res  = await API.getPatientDocs(pid, 10);
+      const docs = res.data?.documents || [];
+      if (!docs.length) { setHTML("history-list","<p class='no-data'>No documents for this patient</p>"); return; }
+      setHTML("history-list", docs.map(d=>`
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+          <div style="font-weight:600;margin-bottom:4px">📎 ${d.filename||"document"}</div>
+          <div style="font-size:11px;color:var(--sub)">${d.document_type?.replace("_"," ")} · ${formatDate(d.uploaded_at)}</div>
+          ${d.risk_score != null ? `<div style="margin-top:6px">Risk: ${formatScore(d.risk_score)} ${riskBadge(d.risk_level||"MODERATE")}</div>` : ""}
+          ${d.summary ? `<div style="font-size:11px;color:var(--sub);margin-top:6px;font-style:italic">${d.summary.slice(0,120)}…</div>` : ""}
+        </div>`).join(""));
+    } catch(err) { H.showError("history-list", err.message); }
+  }
+
+  async function analyzeText() {
+    const pid  = el("text-pid").value.trim();
+    const text = el("text-input").value.trim();
+    if (!pid || !text) { H.toast("Enter Patient ID and text","error"); return; }
+    setHTML("text-results","<div class='loader-wrap'><div class='spinner'></div><p>Extracting entities…</p></div>");
+    try {
+      const res  = await API.analyzeText(pid, text, "medical_summary");
+      const e    = res.data?.extracted_entities || {};
+      const keys = ["diseases","medications","symptoms","lab_tests","risk_factors"];
+      setHTML("text-results", `
+        <div class="success-box mb-16">Extraction complete</div>
+        ${res.data?.summary ? `<div class="info-box mb-16"><b>Summary:</b><br><span style="color:var(--sub)">${res.data.summary}</span></div>` : ""}
+        ${keys.filter(k=>e[k]?.length).map(k=>`
+          <div style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:600;color:var(--sub);margin-bottom:4px">${k.replace("_"," ").toUpperCase()}</div>
+            <div>${e[k].map(i=>`<span class="tag">${i}</span>`).join(" ")}</div>
+          </div>`).join("")}
+      `);
+    } catch(err) { H.showError("text-results", err.message); }
+  }
+</script>
+</body>
+</html>

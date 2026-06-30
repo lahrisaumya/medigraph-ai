@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MediGraph AI — Executive Overview</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <div id="sidebar"></div>
+  <main class="main">
+
+    <!-- Header -->
+    <div class="page-header">
+      <div class="page-title">📊 Executive Overview</div>
+      <div class="page-sub">Real-time healthcare intelligence across all patients</div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid" id="kpi-grid">
+      <div class="loader-wrap"><div class="spinner"></div></div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid-2 mb-24">
+      <div class="chart-box">
+        <div class="chart-title">Risk Level Distribution</div>
+        <div class="chart-inner" id="risk-donut"></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">Knowledge Graph Composition</div>
+        <div class="chart-inner" id="kg-bars"></div>
+      </div>
+    </div>
+
+    <!-- High Risk Patients + Model Metrics -->
+    <div class="grid-main-aside">
+      <!-- High risk patients table -->
+      <div class="card">
+        <div class="card-title">⚠️ High-Risk Patients Requiring Attention</div>
+        <div id="high-risk-table">
+          <div class="loader-wrap"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <!-- System status + model metrics -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <div class="card-title">🤖 ML Model Performance</div>
+          <div id="model-metrics-box">
+            <div class="loader-wrap"><div class="spinner"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">🔗 Service Status</div>
+          <div id="service-status">
+            <div class="loader-wrap"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Documents -->
+    <div class="card mt-24">
+      <div class="card-title">📄 Recent Document Processing</div>
+      <div id="recent-docs-table"></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="utils/api.js"></script>
+<script src="utils/helpers.js"></script>
+<script src="utils/charts.js"></script>
+<script src="components/sidebar.js"></script>
+<script>
+  Sidebar.init("overview");
+
+  async function loadOverview() {
+    // 1. Dashboard stats
+    try {
+      const res  = await API.dashboardStats();
+      const data = res.data || {};
+
+      // KPI Cards
+      setHTML("kpi-grid", `
+        ${kpiCard("👥", "Total Patients",       data.total_patients     || 0, "Registered in system",    "#3B82F6")}
+        ${kpiCard("⚠️", "High Risk Patients",   data.high_risk_patients || 0, "HIGH + CRITICAL level",   "#EF4444")}
+        ${kpiCard("📄", "Documents Processed",  data.documents_processed|| 0, "PDFs analysed",           "#10B981")}
+        ${kpiCard("📊", "Avg Adherence Rate",   (data.avg_adherence_rate||0).toFixed(1)+"%","Across all patients", "#F59E0B")}
+        ${kpiCard("🧠", "Graph Nodes",          (data.kg_nodes     || 0).toLocaleString(), "Neo4j knowledge graph", "#7C3AED")}
+        ${kpiCard("🔗", "Relationships",        (data.kg_relationships||0).toLocaleString(),"Graph connections", "#0EA5E9")}
+      `);
+
+      // Risk donut
+      if (data.risk_distribution && Object.keys(data.risk_distribution).length)
+        Charts.renderRiskDonut("risk-donut", data.risk_distribution);
+      else
+        setHTML("risk-donut", `<p class="no-data">No risk data yet — predict risk for patients first</p>`);
+
+      // KG node type bars
+      if (data.kg_node_types && Object.keys(data.kg_node_types).length)
+        Charts.renderNodeTypeBars("kg-bars", data.kg_node_types);
+      else
+        setHTML("kg-bars", `<p class="no-data">No graph data yet — upload documents to populate</p>`);
+
+      // Model metrics
+      const m = data.model_metrics || {};
+      if (m.accuracy) {
+        setHTML("model-metrics-box", `
+          <div class="grid-2" style="gap:12px">
+            ${metricItem("Accuracy",  m.accuracy,  "84%+ target")}
+            ${metricItem("F1 Score",  m.f1_score,  "Balance score")}
+            ${metricItem("ROC-AUC",   m.roc_auc,   "Discrimination")}
+            ${metricItem("Precision", m.precision, "Positive rate")}
+          </div>
+          <div class="info-box mt-16">
+            <b>CV F1:</b> ${m.cv_f1_mean} ± ${m.cv_f1_std} &nbsp;|&nbsp;
+            <b>Train:</b> ${m.train_samples} &nbsp;|&nbsp;
+            <b>Test:</b> ${m.test_samples}
+          </div>
+        `);
+      } else {
+        setHTML("model-metrics-box", `
+          <p class="no-data" style="text-align:left">Model not trained yet</p>
+          <div class="info-box"><b>Train the model:</b><br><code style="font-size:11px">python -m backend.ml.train_model</code></div>`);
+      }
+
+      // Risk trend indicator
+      const trendIcon = data.risk_trend === "improving" ? "📉 Improving" : data.risk_trend === "worsening" ? "📈 Worsening" : "➡️ Stable";
+      setHTML("service-status", `
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${serviceRow("MongoDB",   "✅", "#10B981")}
+          ${serviceRow("Neo4j",     "✅", "#10B981")}
+          ${serviceRow("Gemini API","✅", "#10B981")}
+          ${serviceRow("XGBoost",   m.accuracy ? "✅ Trained" : "⚠️ Not trained", m.accuracy ? "#10B981" : "#F59E0B")}
+          <hr class="divider" style="margin:8px 0">
+          <div style="font-size:12px;color:var(--sub)">7-day risk trend: <b style="color:var(--text)">${trendIcon}</b></div>
+        </div>
+      `);
+
+    } catch (err) {
+      showError("kpi-grid", `Failed to load dashboard stats: ${err.message}`);
+    }
+
+    // 2. High-risk patients
+    try {
+      const res  = await API.highRiskPatients();
+      const list = res.data?.patients || [];
+      if (!list.length) {
+        setHTML("high-risk-table", `<p class="no-data">No high-risk patients found</p>`);
+      } else {
+        const rows = list.map(p => [
+          `<b>${p.name}</b><br><small class="text-muted">${p.patient_id}</small>`,
+          `${p.age} yrs`,
+          formatList(p.conditions || []),
+          formatScore(p.risk_score),
+          riskBadge(p.risk_level),
+          formatDate(p.predicted_at),
+          `<a class="btn btn-sm btn-outline" href="risk.html">View →</a>`,
+        ]);
+        setHTML("high-risk-table", `<div class="table-wrap">${buildTable(
+          ["Patient","Age","Conditions","Risk Score","Level","Assessed","Action"], rows
+        )}</div>`);
+      }
+    } catch (err) {
+      showError("high-risk-table", err.message);
+    }
+
+    // 3. Recent documents
+    try {
+      const res  = await API.getRecentDocs(8);
+      const docs = res.data?.documents || [];
+      if (!docs.length) {
+        setHTML("recent-docs-table", `<p class="no-data">No documents uploaded yet</p>`);
+      } else {
+        const rows = docs.map(d => [
+          d.filename || "—",
+          d.patient_id,
+          d.document_type?.replace("_"," ") || "—",
+          formatScore(d.risk_score),
+          riskBadge(d.risk_level || "MODERATE"),
+          formatDate(d.uploaded_at),
+        ]);
+        setHTML("recent-docs-table", `<div class="table-wrap">${buildTable(
+          ["File","Patient","Type","Risk Score","Level","Uploaded"], rows
+        )}</div>`);
+      }
+    } catch (err) {
+      showError("recent-docs-table", err.message);
+    }
+  }
+
+  function metricItem(label, val, hint) {
+    return `<div style="text-align:center">
+      <div style="font-size:22px;font-weight:800;color:var(--blue)">${val ? (val*100).toFixed(1)+"%" : "–"}</div>
+      <div style="font-size:11px;font-weight:600;color:var(--sub)">${label}</div>
+      <div style="font-size:10px;color:var(--muted)">${hint}</div>
+    </div>`;
+  }
+
+  function serviceRow(label, status, color) {
+    return `<div style="display:flex;justify-content:space-between;font-size:12px">
+      <span style="color:var(--sub)">${label}</span>
+      <span style="color:${color};font-weight:600">${status}</span>
+    </div>`;
+  }
+
+  function formatList(arr) {
+    if (!arr.length) return '<span class="text-muted">—</span>';
+    return arr.slice(0,2).map(c=>`<span class="tag">${c}</span>`).join(" ")+(arr.length>2?` +${arr.length-2}`:"");
+  }
+
+  loadOverview();
+</script>
+</body>
+</html>
